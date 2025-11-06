@@ -185,7 +185,7 @@ export default function App(){
       const mapData = r.data;
       // Fix image URL for demo mode
       if (IS_DEMO && mapData.imageUrl) {
-        mapData.imageUrl = `${SERVER}${mapData.imageUrl.replace('/maps/', '/template/data/')}`;
+        mapData.imageUrl = mapData.imageUrl.replace('/maps/', '/template/data/');
       }
       setMap(mapData); setUnits(mapData.units || []);
     })
