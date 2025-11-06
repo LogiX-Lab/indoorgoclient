@@ -43,8 +43,7 @@ export default function App(){
     if (!file) return;
     const form = new FormData();
     form.append('map', file);
-    const url = IS_DEMO ? `${SERVER}/template/data/maps` : `${SERVER}/maps`;
-    const res = await axios.post(url, form, { headers: {'Content-Type':'multipart/form-data'} });
+    const res = await axios.post(`${SERVER}/maps`, form, { headers: {'Content-Type':'multipart/form-data'} });
     setMap(res.data);
     setUnits(res.data.units || []);
     // Update URL with new mapId
@@ -129,7 +128,7 @@ export default function App(){
 
   async function saveUnitsToServer(updated){
     if (!map) { setUnits(updated); return; }
-    const url = IS_DEMO ? `${SERVER}/template/data/maps/${map.mapId}/units` : `${SERVER}/maps/${map.mapId}/units`;
+    const url = `${SERVER}/maps/${map.mapId}/units`;
     await axios.post(url, { units: updated });
     setUnits(updated);
   }
@@ -168,13 +167,35 @@ export default function App(){
     if (!map) return alert('Upload and mark a map first');
     const list = Array.from(selectedUnits);
     if (!list.length) return alert('Select some units first');
-    const body = { units: list, startUnit: list[0], returnToStart: false };
-    try{
-      const url = IS_DEMO ? `${SERVER}/template/data/maps/${map.mapId}/route` : `${SERVER}/maps/${map.mapId}/route`;
-      const res = await axios.post(url, body);
-      setRoute(res.data);
-    }catch(err){
-      alert(err.response?.data?.error || 'Route error');
+    
+    if (IS_DEMO) {
+      // Client-side route computation for demo mode
+      const unitMap = {};
+      for (const u of units) unitMap[u.unit] = u;
+      const missing = list.filter(u => !unitMap[u]);
+      if (missing.length) return alert(`Units not found: ${missing.join(', ')}`);
+      
+      const startUnit = list[0];
+      const orderedUnits = [startUnit].concat(list.filter(u => u !== startUnit));
+      
+      const points = orderedUnits.map(u => {
+        const r = unitMap[u];
+        return { id: r.unit, x: r.x, y: r.y, floor: r.floor || 0 };
+      });
+      
+      const { orderedIdx, length } = solveTSP(points, { floorPenalty: 0.02, returnToStart: false });
+      const ordered = orderedIdx.map(i => points[i].id);
+      const routePath = orderedIdx.map(i => ({ id: points[i].id, x: points[i].x, y: points[i].y }));
+      
+      setRoute({ route: ordered, length, path: routePath });
+    } else {
+      const body = { units: list, startUnit: list[0], returnToStart: false };
+      try{
+        const res = await axios.post(`${SERVER}/maps/${map.mapId}/route`, body);
+        setRoute(res.data);
+      }catch(err){
+        alert(err.response?.data?.error || 'Route error');
+      }
     }
   }
 
