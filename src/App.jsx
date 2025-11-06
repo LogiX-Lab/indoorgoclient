@@ -180,7 +180,7 @@ export default function App(){
 
   function loadMapJson(){
     if (!map) return;
-    const url = IS_DEMO ? `${SERVER}/template/data/${map.mapId}.json` : `${SERVER}/maps/${map.mapId}`;
+    const url = IS_DEMO ? `/template/data/${map.mapId}.json` : `${SERVER}/maps/${map.mapId}`;
     axios.get(url).then(r=>{
       const mapData = r.data;
       // Fix image URL for demo mode
