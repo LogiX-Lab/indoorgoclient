@@ -201,12 +201,12 @@ export default function App(){
 
   function loadMapJson(){
     if (!map) return;
-    const url = IS_DEMO ? `${SERVER}/template/data/${map.mapId}.json` : `${SERVER}/maps/${map.mapId}`;
+    const url = IS_DEMO ? `/demo/data/${map.mapId}.json` : `${SERVER}/maps/${map.mapId}`;
     axios.get(url).then(r=>{
       const mapData = r.data;
       // Fix image URL for demo mode
       if (IS_DEMO && mapData.imageUrl) {
-        mapData.imageUrl = mapData.imageUrl.replace('/maps/', `${SERVER}/template/data/`);
+        mapData.imageUrl = mapData.imageUrl.replace('/maps/', '/demo/data/');
       }
       setMap(mapData); setUnits(mapData.units || []);
     })
@@ -215,12 +215,12 @@ export default function App(){
   // Load map by ID (for URL-based loading)
   async function loadMapById(mapId){
     try {
-      const url = IS_DEMO ? `${SERVER}/template/data/${mapId}.json` : `${SERVER}/maps/${mapId}`;
+      const url = IS_DEMO ? `/demo/data/${mapId}.json` : `${SERVER}/maps/${mapId}`;
       const res = await axios.get(url);
       const mapData = res.data;
-      // Fix image URL for demo mode to use server-side template files
+      // Fix image URL for demo mode to use client-side static files
       if (IS_DEMO && mapData.imageUrl) {
-        mapData.imageUrl = mapData.imageUrl.replace('/maps/', `${SERVER}/template/data/`);
+        mapData.imageUrl = mapData.imageUrl.replace('/maps/', '/demo/data/');
       }
       setMap(mapData);
       setUnits(mapData.units || []);
