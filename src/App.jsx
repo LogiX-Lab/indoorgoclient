@@ -201,41 +201,29 @@ export default function App(){
 
   function loadMapJson(){
     if (!map) return;
-    const url = IS_DEMO ? `/template/data/${map.mapId}.json` : `${SERVER}/maps/${map.mapId}`;
-    if (IS_DEMO) {
-      fetch(url).then(r => r.json()).then(mapData => {
-        // Fix image URL for demo mode
-        if (mapData.imageUrl) {
-          mapData.imageUrl = mapData.imageUrl.replace('/maps/', '/template/data/');
-        }
-        setMap(mapData); setUnits(mapData.units || []);
-      }).catch(err => console.error('Failed to load map:', err));
-    } else {
-      axios.get(url).then(r=>{
-        setMap(r.data); setUnits(r.data.units || []);
-      })
-    }
+    const url = IS_DEMO ? `${SERVER}/template/data/${map.mapId}.json` : `${SERVER}/maps/${map.mapId}`;
+    axios.get(url).then(r=>{
+      const mapData = r.data;
+      // Fix image URL for demo mode
+      if (IS_DEMO && mapData.imageUrl) {
+        mapData.imageUrl = mapData.imageUrl.replace('/maps/', `${SERVER}/template/data/`);
+      }
+      setMap(mapData); setUnits(mapData.units || []);
+    })
   }
 
   // Load map by ID (for URL-based loading)
   async function loadMapById(mapId){
     try {
-      const url = IS_DEMO ? `/template/data/${mapId}.json` : `${SERVER}/maps/${mapId}`;
-      if (IS_DEMO) {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Map not found');
-        const mapData = await res.json();
-        // Fix image URL for demo mode to use client-side static files
-        if (mapData.imageUrl) {
-          mapData.imageUrl = mapData.imageUrl.replace('/maps/', '/template/data/');
-        }
-        setMap(mapData);
-        setUnits(mapData.units || []);
-      } else {
-        const res = await axios.get(url);
-        setMap(res.data);
-        setUnits(res.data.units || []);
+      const url = IS_DEMO ? `${SERVER}/template/data/${mapId}.json` : `${SERVER}/maps/${mapId}`;
+      const res = await axios.get(url);
+      const mapData = res.data;
+      // Fix image URL for demo mode to use server-side template files
+      if (IS_DEMO && mapData.imageUrl) {
+        mapData.imageUrl = mapData.imageUrl.replace('/maps/', `${SERVER}/template/data/`);
       }
+      setMap(mapData);
+      setUnits(mapData.units || []);
       // Update URL without page reload
       window.history.pushState({}, '', `/maps/${mapId}`);
     } catch (error) {
