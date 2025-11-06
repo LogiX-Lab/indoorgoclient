@@ -1,7 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react'
 import axios from 'axios'
+import { solveTSP } from './tsp.js'
 
 const SERVER = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+const IS_DEMO = import.meta.env.VITE_DEPLOY_MODE === 'demo'
 
 export default function App(){
   const [map, setMap] = useState(null) // {mapId,imageUrl,width,height,units}
@@ -41,7 +43,8 @@ export default function App(){
     if (!file) return;
     const form = new FormData();
     form.append('map', file);
-    const res = await axios.post(`${SERVER}/maps`, form, { headers: {'Content-Type':'multipart/form-data'} });
+    const url = IS_DEMO ? `${SERVER}/template/data/maps` : `${SERVER}/maps`;
+    const res = await axios.post(url, form, { headers: {'Content-Type':'multipart/form-data'} });
     setMap(res.data);
     setUnits(res.data.units || []);
     // Update URL with new mapId
@@ -126,7 +129,8 @@ export default function App(){
 
   async function saveUnitsToServer(updated){
     if (!map) { setUnits(updated); return; }
-    await axios.post(`${SERVER}/maps/${map.mapId}/units`, { units: updated });
+    const url = IS_DEMO ? `${SERVER}/template/data/maps/${map.mapId}/units` : `${SERVER}/maps/${map.mapId}/units`;
+    await axios.post(url, { units: updated });
     setUnits(updated);
   }
 
@@ -166,7 +170,8 @@ export default function App(){
     if (!list.length) return alert('Select some units first');
     const body = { units: list, startUnit: list[0], returnToStart: false };
     try{
-      const res = await axios.post(`${SERVER}/maps/${map.mapId}/route`, body);
+      const url = IS_DEMO ? `${SERVER}/template/data/maps/${map.mapId}/route` : `${SERVER}/maps/${map.mapId}/route`;
+      const res = await axios.post(url, body);
       setRoute(res.data);
     }catch(err){
       alert(err.response?.data?.error || 'Route error');
@@ -175,17 +180,29 @@ export default function App(){
 
   function loadMapJson(){
     if (!map) return;
-    axios.get(`${SERVER}/maps/${map.mapId}`).then(r=>{
-      setMap(r.data); setUnits(r.data.units || []);
+    const url = IS_DEMO ? `${SERVER}/template/data/${map.mapId}.json` : `${SERVER}/maps/${map.mapId}`;
+    axios.get(url).then(r=>{
+      const mapData = r.data;
+      // Fix image URL for demo mode
+      if (IS_DEMO && mapData.imageUrl) {
+        mapData.imageUrl = `${SERVER}${mapData.imageUrl.replace('/maps/', '/template/data/')}`;
+      }
+      setMap(mapData); setUnits(mapData.units || []);
     })
   }
 
   // Load map by ID (for URL-based loading)
   async function loadMapById(mapId){
     try {
-      const res = await axios.get(`${SERVER}/maps/${mapId}`);
-      setMap(res.data);
-      setUnits(res.data.units || []);
+      const url = IS_DEMO ? `/template/data/${mapId}.json` : `${SERVER}/maps/${mapId}`;
+      const res = await axios.get(url);
+      const mapData = res.data;
+      // Fix image URL for demo mode to use client-side static files
+      if (IS_DEMO && mapData.imageUrl) {
+        mapData.imageUrl = mapData.imageUrl.replace('/maps/', '/template/data/');
+      }
+      setMap(mapData);
+      setUnits(mapData.units || []);
       // Update URL without page reload
       window.history.pushState({}, '', `/maps/${mapId}`);
     } catch (error) {
@@ -220,16 +237,41 @@ export default function App(){
     if (!map) return alert('Upload and mark a map first');
     const list = inputList.split(',').map(s=>s.trim()).filter(Boolean);
     if (!list.length) return alert('Add some unit numbers in the list');
-    const body = { units: list, startUnit: list[0], returnToStart: false };
-    try{
-      const res = await axios.post(`${SERVER}/maps/${map.mapId}/route`, body);
-      setRoute(res.data);
-      // Auto-navigate to Directory Map view on mobile after computing route
-      if (window.innerWidth <= 768) {
-        setActiveTab('map');
+    
+    if (IS_DEMO) {
+      // Client-side route computation for demo mode
+      const unitMap = {};
+      for (const u of units) unitMap[u.unit] = u;
+      const missing = list.filter(u => !unitMap[u]);
+      if (missing.length) return alert(`Units not found: ${missing.join(', ')}`);
+      
+      const startUnit = list[0];
+      const orderedUnits = [startUnit].concat(list.filter(u => u !== startUnit));
+      
+      const points = orderedUnits.map(u => {
+        const r = unitMap[u];
+        return { id: r.unit, x: r.x, y: r.y, floor: r.floor || 0 };
+      });
+      
+      const { orderedIdx, length } = solveTSP(points, { floorPenalty: 0.02, returnToStart: false });
+      const ordered = orderedIdx.map(i => points[i].id);
+      const routePath = orderedIdx.map(i => ({ id: points[i].id, x: points[i].x, y: points[i].y }));
+      
+      setRoute({ route: ordered, length, path: routePath });
+    } else {
+      // Server-side route computation
+      const body = { units: list, startUnit: list[0], returnToStart: false };
+      try{
+        const res = await axios.post(`${SERVER}/maps/${map.mapId}/route`, body);
+        setRoute(res.data);
+      }catch(err){
+        alert(err.response?.data?.error || 'Route error');
       }
-    }catch(err){
-      alert(err.response?.data?.error || 'Route error');
+    }
+    
+    // Auto-navigate to Directory Map view on mobile after computing route
+    if (window.innerWidth <= 768) {
+      setActiveTab('map');
     }
   }
 
@@ -511,10 +553,12 @@ export default function App(){
               <div style={{position: 'relative', display: 'inline-block', transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom})`, transformOrigin: 'center'}}>
                 <img 
                   ref={imgRef} 
-                  src={`${SERVER}${map.imageUrl}`} 
+                  src={IS_DEMO ? map.imageUrl : `${SERVER}${map.imageUrl}`} 
                   className="map-img" 
                   alt="map" 
                   onClick={onMapClick}
+                  onError={(e) => console.error('Image failed to load:', e.target.src)}
+                  onLoad={() => console.log('Image loaded:', IS_DEMO ? map.imageUrl : `${SERVER}${map.imageUrl}`)}
                 />
                 {/* overlay SVG */}
                 <svg
