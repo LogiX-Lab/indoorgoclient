@@ -128,9 +128,15 @@ html, body, #root {
 
 /* Mobile scroll fix */
 @media (max-width: 768px) {
+  body {
+    overflow: hidden !important;
+  }
+  
   .main-tab {
     -webkit-overflow-scrolling: touch;
-    overflow-y: scroll;
+    overflow-y: auto !important;
+    scroll-behavior: smooth;
+    height: calc(100vh - 76px) !important;
   }
   
   .scroll-card {
