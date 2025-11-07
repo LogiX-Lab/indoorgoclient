@@ -605,14 +605,15 @@ export default function App(){
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
               >
-                <div className="d-flex justify-content-center align-items-center" style={{minHeight: '100%', minWidth: '100%'}}>
-                <div className="position-absolute bottom-0 start-0 w-100 p-3" style={{zIndex: 1000}}>
-                  <div className="d-flex justify-content-between align-items-center">
-                    <button className="btn btn-primary" onClick={rotateLeft}>↺</button>
-                    <button className="btn btn-success" onClick={selectedUnits.size > 0 ? computeRouteForSelected : computeRoute}>🎯 Route{selectedUnits.size > 0 ? ` (${selectedUnits.size})` : ''}</button>
-                    <button className="btn btn-primary" onClick={rotateRight}>↻</button>
+                {/* Floating Control Panel */}
+                <div className="position-absolute top-0 end-0 m-3" style={{zIndex: 1000}}>
+                  <div className="d-flex gap-2">
+                    <button className="btn btn-primary btn-sm" onClick={rotateLeft}>↺</button>
+                    <button className="btn btn-success btn-sm" onClick={selectedUnits.size > 0 ? computeRouteForSelected : computeRoute}>🎯 Route{selectedUnits.size > 0 ? ` (${selectedUnits.size})` : ''}</button>
+                    <button className="btn btn-primary btn-sm" onClick={rotateRight}>↻</button>
                   </div>
                 </div>
+                <div className="d-flex justify-content-center align-items-center" style={{minHeight: '100%', minWidth: '100%'}}>
                   <div style={{position: 'relative', display: 'inline-block', transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom})`, transformOrigin: 'center'}}>
                     <img 
                       ref={imgRef} 
@@ -879,14 +880,15 @@ export default function App(){
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
           >
-            <div className="d-flex justify-content-center align-items-center" style={{minHeight: '100%', minWidth: '100%'}}>
-            <div className="position-absolute bottom-0 start-0 w-100 p-3" style={{zIndex: 1000}}>
-              <div className="d-flex justify-content-between align-items-center">
+            {/* Floating Control Panel */}
+            <div className="position-absolute top-0 end-0 m-3" style={{zIndex: 1000}}>
+              <div className="d-flex gap-2">
                 <button className="btn btn-primary" onClick={rotateLeft}>↺</button>
                 <button className="btn btn-success" onClick={selectedUnits.size > 0 ? computeRouteForSelected : computeRoute}>🎯 Route{selectedUnits.size > 0 ? ` (${selectedUnits.size})` : ''}</button>
                 <button className="btn btn-primary" onClick={rotateRight}>↻</button>
               </div>
             </div>
+            <div className="d-flex justify-content-center align-items-center" style={{minHeight: '100%', minWidth: '100%'}}>
               <div style={{position: 'relative', display: 'inline-block', transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom})`, transformOrigin: 'center'}}>
                 <img 
                   ref={imgRef} 
