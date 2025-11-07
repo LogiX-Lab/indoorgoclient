@@ -23,9 +23,13 @@ export default function App(){
   const [selectedUnits, setSelectedUnits] = useState(new Set()) // multi-selected units
   const [leftPanelVisible, setLeftPanelVisible] = useState(true) // left panel visibility
   const [scrollY, setScrollY] = useState(0) // scroll position for animations
+  const [swipeOffset, setSwipeOffset] = useState(0) // swipe offset for mobile
+  const [isDraggingSwipe, setIsDraggingSwipe] = useState(false) // swipe dragging state
+  const [swipeStartX, setSwipeStartX] = useState(0) // swipe start position
   const imgRef = useRef()
   const containerRef = useRef()
   const leftPanelRef = useRef()
+  const swipeContainerRef = useRef()
 
   // Load map from URL on component mount
   useEffect(() => {
@@ -380,6 +384,46 @@ export default function App(){
     }
   }
 
+  // Swipe handlers for mobile tab switching
+  function handleSwipeStart(e){
+    if (window.innerWidth > 768) return;
+    setIsDraggingSwipe(true);
+    setSwipeStartX(e.touches[0].clientX);
+  }
+
+  function handleSwipeMove(e){
+    if (window.innerWidth > 768 || !isDraggingSwipe) return;
+    const currentX = e.touches[0].clientX;
+    const diff = currentX - swipeStartX;
+    const baseOffset = activeTab === 'main' ? 0 : -50;
+    setSwipeOffset(baseOffset + (diff / window.innerWidth) * 50);
+  }
+
+  function handleSwipeEnd(e){
+    if (window.innerWidth > 768 || !isDraggingSwipe) return;
+    setIsDraggingSwipe(false);
+    const endX = e.changedTouches[0].clientX;
+    const diff = endX - swipeStartX;
+    const threshold = window.innerWidth * 0.3;
+    
+    if (Math.abs(diff) > threshold) {
+      if (diff > 0 && activeTab === 'map') {
+        setActiveTab('main');
+      } else if (diff < 0 && activeTab === 'main') {
+        setActiveTab('map');
+      }
+    }
+    
+    setSwipeOffset(activeTab === 'main' ? 0 : -50);
+  }
+
+  // Update swipe offset when tab changes
+  useEffect(() => {
+    if (window.innerWidth <= 768) {
+      setSwipeOffset(activeTab === 'main' ? 0 : -50);
+    }
+  }, [activeTab]);
+
   return (
     <div className="container-fluid h-100">
       {/* Tab Navigation */}
@@ -398,8 +442,18 @@ export default function App(){
         </div>
       </nav>
 
-      {/* Main Tab Content */}
-      <div ref={leftPanelRef} className={`main-tab ${activeTab === 'main' ? 'd-block' : 'd-none'} ${!leftPanelVisible ? 'd-lg-none' : ''} p-4`}>
+      {/* Mobile Swipe Container */}
+      <div className="d-lg-none">
+        <div 
+          ref={swipeContainerRef}
+          className="swipe-container"
+          style={{transform: `translateX(${swipeOffset}%)`}}
+          onTouchStart={handleSwipeStart}
+          onTouchMove={handleSwipeMove}
+          onTouchEnd={handleSwipeEnd}
+        >
+          {/* Main Tab Content */}
+          <div ref={leftPanelRef} className="main-tab p-4">
         <div className="d-flex flex-column">
           <div className="card mb-1 scroll-card" style={{transform: `translateY(${scrollY > 100 ? Math.max(-100, -scrollY * 0.2) : 0}px)`, zIndex: scrollY < 100 ? 10 : 1}}>
             <div className="card-header bg-success text-white">
@@ -523,6 +577,268 @@ export default function App(){
               ) : <div className="text-muted">No route computed yet</div>}
             </div>
           </div>
+          </div>
+          </div>
+
+          {/* Directory Map Tab Content */}
+          <div className={`map-tab ${!map ? 'no-map' : ''} position-relative`}>
+            <div className="d-flex justify-content-between align-items-center p-3 bg-primary text-white">
+              <h5 className="mb-0">🗺️ Directory Map</h5>
+            </div>
+            {map ? (
+              <div 
+                ref={containerRef}
+                className="map-container w-100 h-100 position-relative"
+                style={{cursor: isDragging ? 'grabbing' : 'grab', overflow: zoom > 1 ? 'auto' : 'hidden'}}
+                onWheel={handleWheel}
+                onTouchStart={(e) => {
+                  handleTouchStart(e);
+                  handleTouchStartPan(e);
+                }}
+                onTouchMove={(e) => {
+                  handleTouchMove(e);
+                  handleTouchMovePan(e);
+                }}
+                onTouchEnd={() => setIsDragging(false)}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                <div className="d-flex justify-content-center align-items-center" style={{minHeight: '100%', minWidth: '100%'}}>
+                <div className="position-absolute bottom-0 start-0 w-100 p-3" style={{zIndex: 1000}}>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <button className="btn btn-primary" onClick={rotateLeft}>↺</button>
+                    <button className="btn btn-success" onClick={selectedUnits.size > 0 ? computeRouteForSelected : computeRoute}>🎯 Route{selectedUnits.size > 0 ? ` (${selectedUnits.size})` : ''}</button>
+                    <button className="btn btn-primary" onClick={rotateRight}>↻</button>
+                  </div>
+                </div>
+                  <div style={{position: 'relative', display: 'inline-block', transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom})`, transformOrigin: 'center'}}>
+                    <img 
+                      ref={imgRef} 
+                      src={IS_DEMO ? map.imageUrl : `${SERVER}${map.imageUrl}`} 
+                      className="map-img" 
+                      alt="map" 
+                      onClick={onMapClick}
+                      onError={(e) => console.error('Image failed to load:', e.target.src)}
+                      onLoad={() => console.log('Image loaded:', IS_DEMO ? map.imageUrl : `${SERVER}${map.imageUrl}`)}
+                    />
+                    {/* overlay SVG */}
+                    <svg
+                      className="svg-overlay"
+                      viewBox={`0 0 ${imgRef.current?.naturalWidth || 800} ${imgRef.current?.naturalHeight || 600}`}
+                      preserveAspectRatio="xMidYMid meet"
+                      style={{pointerEvents: 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%'}}>
+                      {/* draw markers */}
+                      {units.map((u, idx)=>{
+                        const p = pixelPos(u);
+                        const img = imgRef.current;
+                        const baseSize = Math.min(img?.naturalWidth || 800, img?.naturalHeight || 600);
+                        const circleRadius = Math.max(18, baseSize * 0.025);
+                        const fontSize = Math.max(10, baseSize * 0.012);
+                        const strokeWidth = Math.max(1, baseSize * 0.002);
+                        
+                        // Check if unit is in input list
+                        const inputUnits = inputList.split(',').map(s=>s.trim()).filter(Boolean);
+                        const isInInputList = inputUnits.includes(u.unit);
+                        
+                        // Get unit color state (manual clicking always takes precedence)
+                        const unitState = unitStates[u.unit];
+                        const isHighlighted = highlightedUnit === u.unit;
+                        let fillColor;
+                        let circleSize = circleRadius;
+                        
+                        if (isHighlighted) {
+                          fillColor = '#FFD700'; // yellow for highlighted
+                          circleSize = circleRadius * 1.5; // increase size
+                        } else if (unitState === 'red') {
+                          fillColor = '#dc3545'; // red
+                        } else if (unitState === 'green') {
+                          fillColor = '#28a745'; // green
+                        } else if (unitState === 'blue') {
+                          fillColor = '#2b8aef'; // blue
+                        } else if (isInInputList) {
+                          fillColor = '#dc3545'; // red - input list default when no manual state
+                        } else {
+                          fillColor = '#2b8aef'; // blue (default)
+                        }
+                        
+                        return (
+                          <g key={`unit-${idx}`} transform={`translate(${p.x},${p.y})`} style={{cursor: 'pointer', pointerEvents: 'all'}} onClick={(e) => onUnitClick(u.unit, e)} onDoubleClick={(e) => onUnitDoubleClick(u.unit, e)}>
+                            <circle r={circleSize} fill={fillColor} stroke="#fff" strokeWidth={strokeWidth} style={{pointerEvents: 'all'}} />
+                            <text x={0} y={fontSize * 0.35} textAnchor="middle" fontSize={fontSize} fill="#9932CC" style={{pointerEvents: 'all'}}>{u.unit}</text>
+                          </g>
+                        )
+                      })}
+
+                      {/* draw route polyline */}
+                      {route && route.path && (
+                        <g>
+                          <polyline
+                            points={route.path.map(p=>`${p.x * (imgRef.current?.naturalWidth||800)},${p.y * (imgRef.current?.naturalHeight||600)}`).join(' ')}
+                            fill="none" stroke="#ff6b6b" strokeWidth={Math.max(3, (Math.min(imgRef.current?.naturalWidth || 800, imgRef.current?.naturalHeight || 600)) * 0.004)} strokeLinejoin="round" strokeLinecap="round" opacity={0.9} />
+                          {route.path.map((p,i)=> {
+                            const img = imgRef.current;
+                            const baseSize = Math.min(img?.naturalWidth || 800, img?.naturalHeight || 600);
+                            const seqRadius = Math.max(6, baseSize * 0.008);
+                            const seqFontSize = Math.max(6, baseSize * 0.007);
+                            const seqStrokeWidth = Math.max(1, baseSize * 0.001);
+                            
+                            // Position sequence number slightly offset from unit center
+                            const offsetX = p.x * (imgRef.current?.naturalWidth||800) + (baseSize * 0.02);
+                            const offsetY = p.y * (imgRef.current?.naturalHeight||600) - (baseSize * 0.02);
+                            
+                            return (
+                              <g key={`seq-${i}`} transform={`translate(${offsetX},${offsetY})`}>
+                                <circle r={seqRadius} fill="#ffc107" stroke="#fff" strokeWidth={seqStrokeWidth} />
+                                <text x={0} y={seqFontSize * 0.35} textAnchor="middle" fontSize={seqFontSize} fill="#000">{i+1}</text>
+                              </g>
+                            )
+                          })}
+                        </g>
+                      )}
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="d-flex align-items-center justify-content-center h-100">
+                <div className="text-center">
+                  <div className="display-1 text-muted mb-3">🗺️</div>
+                  <h3 className="text-muted">No map loaded</h3>
+                  <p className="text-muted">Swipe left to go to Route Planner</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Main Tab Content */}
+      <div ref={leftPanelRef} className={`main-tab d-none d-lg-block ${!leftPanelVisible ? 'd-lg-none' : ''} p-4`}>
+        <div className="d-flex flex-column">
+          <div className="card mb-1 scroll-card" style={{transform: `translateY(${scrollY > 100 ? Math.max(-100, -scrollY * 0.2) : 0}px)`, zIndex: scrollY < 100 ? 10 : 1}}>
+            <div className="card-header bg-success text-white">
+              <h5 className="mb-0">📁 Upload Map</h5>
+            </div>
+            <div className="card-body">
+              <label className="form-label">Upload directory map image</label>
+              <input type="file" className="form-control" accept="image/*" onChange={uploadMap} />
+              <div className="mt-3">
+                <button className="btn btn-outline-primary btn-sm me-2" onClick={()=>{ if (map) exportJSON()}}>📤 Export JSON</button>
+                <button className="btn btn-outline-secondary btn-sm" onClick={()=>{ if (map) loadMapJson()}}>🔄 Reload</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="card mb-1 scroll-card" style={{transform: `translateY(${scrollY > 300 ? Math.max(-100, -(scrollY - 200) * 0.2) : scrollY < 100 ? Math.min(50, (100 - scrollY) * 0.3) : 0}px)`, zIndex: scrollY >= 100 && scrollY < 300 ? 10 : scrollY < 100 ? 5 : 1}}>
+            <div className="card-header bg-info text-white">
+              <div className="d-flex justify-content-between align-items-center">
+                <div className="d-flex align-items-center">
+                  <div className="d-flex flex-column me-2">
+                    <button className="btn btn-outline-light btn-sm mb-1" style={{fontSize: '10px', padding: '2px 6px'}} onClick={sortUnitsAsc}>🔼</button>
+                    <button className="btn btn-outline-light btn-sm" style={{fontSize: '10px', padding: '2px 6px'}} onClick={sortUnitsDesc}>🔽</button>
+                  </div>
+                  <h5 className="mb-0">📍 Units ({units.length}) {map && <small className="text-light">ID: {map.mapId}</small>}</h5>
+                </div>
+                {selectedUnits.size > 0 && (
+                  <button className="btn btn-success btn-sm" onClick={addSelectedToRoute}>➕ Add ({selectedUnits.size})</button>
+                )}
+              </div>
+            </div>
+            <div className="card-body" style={{maxHeight: '300px', overflowY: 'auto'}}>
+              {units.map((u,i)=> (
+                <div 
+                  className={`d-flex justify-content-between align-items-center p-2 mb-2 border rounded ${selectedUnits.has(u.unit) ? 'bg-primary text-white' : highlightedUnit === u.unit ? 'bg-warning' : 'bg-light'}`}
+                  key={i}
+                  onClick={() => { 
+                    if (editingUnit !== u.unit) { 
+                      setEditingUnit(null); 
+                      setHighlightedUnit(highlightedUnit === u.unit ? null : u.unit);
+                      toggleUnitSelection(u.unit);
+                    } 
+                  }}
+                  onDoubleClick={() => { setEditingUnit(u.unit); setEditValue(u.unit); }}
+                  style={{cursor: 'pointer'}}
+                >
+                  <div className="d-flex align-items-center">
+                    <input 
+                      type="checkbox" 
+                      className="form-check-input me-2" 
+                      checked={selectedUnits.has(u.unit)}
+                      onChange={() => toggleUnitSelection(u.unit)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  {editingUnit === u.unit ? (
+                    <input 
+                      className="form-control form-control-sm fw-bold" 
+                      style={{width: '120px', minWidth: '80px'}}
+                      value={editValue} 
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="fw-bold">{u.unit}</span>
+                  )}
+                  </div>
+                  <div>
+                    <button 
+                      className="btn btn-outline-primary btn-sm me-1" 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if (editingUnit === u.unit) {
+                          // Confirm edit
+                          const updatedUnits = units.map(unit => 
+                            unit.unit === u.unit ? { ...unit, unit: editValue.trim() } : unit
+                          );
+                          setUnits(updatedUnits);
+                          saveUnitsToServer(updatedUnits);
+                          setEditingUnit(null);
+                        } else {
+                          // Start edit
+                          setEditingUnit(u.unit);
+                          setEditValue(u.unit);
+                        }
+                      }}
+                    >
+                      {editingUnit === u.unit ? '✅' : '✏️'}
+                    </button>
+                    <button className="btn btn-outline-danger btn-sm" onClick={(e) => { e.stopPropagation(); const upd = units.filter(x=>x!==u); setUnits(upd); saveUnitsToServer(upd); }}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card mb-1 scroll-card" style={{transform: `translateY(${scrollY > 500 ? Math.max(-100, -(scrollY - 400) * 0.2) : scrollY < 300 ? Math.min(50, (300 - scrollY) * 0.3) : 0}px)`, zIndex: scrollY >= 300 && scrollY < 500 ? 10 : scrollY < 300 ? 3 : 1}}>
+            <div className="card-header bg-warning text-dark">
+              <h5 className="mb-0">🏃♀️ Route Planning</h5>
+            </div>
+            <div className="card-body">
+              <label className="form-label">Paste comma-separated unit list to route</label>
+              <textarea className="form-control mb-3" rows={4} value={inputList} onChange={e=>setInputList(e.target.value)} placeholder="1010, 1050, 1150"></textarea>
+              <button className="btn btn-success btn-lg" onClick={computeRoute}>🎯 Compute Route</button>
+            </div>
+          </div>
+
+          <div className="card scroll-card" style={{transform: `translateY(${scrollY < 500 ? Math.min(50, (500 - scrollY) * 0.3) : 0}px)`, zIndex: scrollY >= 500 ? 10 : 2}}>
+            <div className="card-header bg-secondary text-white">
+              <h5 className="mb-0">🛤️ Route Result</h5>
+            </div>
+            <div className="card-body">
+              {route ? (
+                <div>
+                  <div className="alert alert-success">
+                    <strong>Length score:</strong> {Math.round(route.length*100)/100}
+                  </div>
+                  <ol className="list-group list-group-numbered">
+                    {route.route.map((r,i)=> <li key={i} className="list-group-item">{r}</li>)}
+                  </ol>
+                </div>
+              ) : <div className="text-muted">No route computed yet</div>}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -541,13 +857,13 @@ export default function App(){
         </div>
       </div>
 
-      {/* Directory Map Tab Content */}
-      <div className={`map-tab ${!map ? 'no-map' : ''} ${activeTab === 'map' ? 'd-block' : 'd-none'} position-relative`} style={{height: 'calc(100vh - 76px)'}}>
+      {/* Desktop Directory Map Tab Content */}
+      <div className={`map-tab d-none d-lg-block ${!map ? 'no-map' : ''} position-relative`} style={{height: 'calc(100vh - 76px)'}}>
         {map ? (
           <div 
             ref={containerRef}
-            className="w-100 h-100 position-relative d-flex justify-content-center align-items-center"
-            style={{cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden'}}
+            className="map-container w-100 h-100 position-relative"
+            style={{cursor: isDragging ? 'grabbing' : 'grab', overflow: zoom > 1 ? 'auto' : 'hidden'}}
             onWheel={handleWheel}
             onTouchStart={(e) => {
               handleTouchStart(e);
@@ -563,7 +879,7 @@ export default function App(){
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
           >
-            {/* Bottom control bar */}
+            <div className="d-flex justify-content-center align-items-center" style={{minHeight: '100%', minWidth: '100%'}}>
             <div className="position-absolute bottom-0 start-0 w-100 p-3" style={{zIndex: 1000}}>
               <div className="d-flex justify-content-between align-items-center">
                 <button className="btn btn-primary" onClick={rotateLeft}>↺</button>
@@ -578,8 +894,6 @@ export default function App(){
                   className="map-img" 
                   alt="map" 
                   onClick={onMapClick}
-                  onError={(e) => console.error('Image failed to load:', e.target.src)}
-                  onLoad={() => console.log('Image loaded:', IS_DEMO ? map.imageUrl : `${SERVER}${map.imageUrl}`)}
                 />
                 {/* overlay SVG */}
                 <svg
@@ -655,9 +969,9 @@ export default function App(){
                       })}
                     </g>
                   )}
-
                 </svg>
               </div>
+            </div>
           </div>
         ) : (
           <div className="d-flex align-items-center justify-content-center h-100">
