@@ -26,6 +26,7 @@ export default function App(){
   const [swipeOffset, setSwipeOffset] = useState(0) // swipe offset for mobile
   const [isDraggingSwipe, setIsDraggingSwipe] = useState(false) // swipe dragging state
   const [swipeStartX, setSwipeStartX] = useState(0) // swipe start position
+  const [dropdownOpen, setDropdownOpen] = useState(false) // dropdown menu state
   const imgRef = useRef()
   const containerRef = useRef()
   const leftPanelRef = useRef()
@@ -427,27 +428,33 @@ export default function App(){
   return (
     <div className="container-fluid h-100">
       {/* Tab Navigation */}
-      <nav className="navbar navbar-expand-lg navbar-dark bg-primary d-lg-none">
+      <nav className="navbar navbar-expand-lg navbar-dark bg-primary d-lg-none position-fixed w-100" style={{zIndex: 1002}}>
         <div className="container-fluid">
           <span className="navbar-brand mb-0 h1">🏬 Mall Route System</span>
           <div className="dropdown">
-            <button className="btn btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
-              {activeTab === 'main' ? '📋 Route Planner' : '🗺️ Directory Map'}
+            <button 
+              className="btn btn-outline-light dropdown-toggle btn-sm"
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+            >
+              {activeTab === 'main' ? '📋 Route Plan' : '🗺️ Directory Map'}
             </button>
-            <ul className="dropdown-menu dropdown-menu-end">
-              <li><button className={`dropdown-item ${activeTab === 'main' ? 'active' : ''}`} onClick={() => setActiveTab('main')}>📋 Route Planner</button></li>
-              <li><button className={`dropdown-item ${activeTab === 'map' ? 'active' : ''}`} onClick={() => setActiveTab('map')}>🗺️ Directory Map</button></li>
-            </ul>
+            {dropdownOpen && (
+              <ul className="dropdown-menu dropdown-menu-end show">
+                <li><button className={`dropdown-item ${activeTab === 'main' ? 'active' : ''}`} onClick={() => { setActiveTab('main'); setSwipeOffset(0); setDropdownOpen(false); }}>📋 Route Plan</button></li>
+                <li><button className={`dropdown-item ${activeTab === 'map' ? 'active' : ''}`} onClick={() => { setActiveTab('map'); setSwipeOffset(-50); setDropdownOpen(false); }}>🗺️ Directory Map</button></li>
+              </ul>
+            )}
           </div>
         </div>
       </nav>
 
       {/* Mobile Swipe Container */}
       <div className="d-lg-none">
+
         <div 
           ref={swipeContainerRef}
           className="swipe-container"
-          style={{transform: `translateX(${swipeOffset}%)`}}
+          style={{transform: `translateX(${swipeOffset}%)`, paddingTop: '76px', height: 'calc(100vh - 76px)'}}
           onTouchStart={handleSwipeStart}
           onTouchMove={handleSwipeMove}
           onTouchEnd={handleSwipeEnd}
@@ -581,10 +588,7 @@ export default function App(){
           </div>
 
           {/* Directory Map Tab Content */}
-          <div className={`map-tab ${!map ? 'no-map' : ''} position-relative`}>
-            <div className="d-flex justify-content-between align-items-center p-3 bg-primary text-white">
-              <h5 className="mb-0">🗺️ Directory Map</h5>
-            </div>
+          <div className={`map-tab ${!map ? 'no-map' : ''} position-relative`} style={{height: '100%'}}>
             {map ? (
               <div 
                 ref={containerRef}
@@ -606,7 +610,7 @@ export default function App(){
                 onMouseLeave={handleMouseUp}
               >
                 {/* Floating Control Panel */}
-                <div className="position-absolute top-0 end-0 m-3" style={{zIndex: 1000}}>
+                <div className="position-absolute" style={{top: '60px', right: '12px', zIndex: 1000}}>
                   <div className="d-flex gap-2">
                     <button className="btn btn-primary btn-sm" onClick={rotateLeft}>↺</button>
                     <button className="btn btn-success btn-sm" onClick={selectedUnits.size > 0 ? computeRouteForSelected : computeRoute}>🎯 Route{selectedUnits.size > 0 ? ` (${selectedUnits.size})` : ''}</button>
