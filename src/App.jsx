@@ -64,49 +64,42 @@ export default function App(){
     let x, y;
     const isMobile = window.innerWidth <= 768;
     
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
     if (isMobile) {
-      // Mobile-specific coordinate calculation
+      // Mobile: use same transform logic as desktop
       const imgRect = img.getBoundingClientRect();
+      const containerRect = containerRef.current.getBoundingClientRect();
       
-      // Use touch coordinates if available, otherwise mouse coordinates
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const centerX = containerRect.left + containerRect.width / 2;
+      const centerY = containerRect.top + containerRect.height / 2;
+      let clickX = clientX - centerX;
+      let clickY = clientY - centerY;
       
-      // Simple coordinate calculation for mobile
-      x = (clientX - imgRect.left) / imgRect.width;
-      y = (clientY - imgRect.top) / imgRect.height;
+      clickX /= zoom;
+      clickY /= zoom;
+      
+      const radians = (-rotation * Math.PI) / 180;
+      const rotatedX = clickX * Math.cos(radians) - clickY * Math.sin(radians);
+      const rotatedY = clickX * Math.sin(radians) + clickY * Math.cos(radians);
+      
+      x = (rotatedX - pan.x + imgRect.width / 2) / imgRect.width;
+      y = (rotatedY - pan.y + imgRect.height / 2) / imgRect.height;
     } else {
-      // Desktop coordinate calculation with transforms
-      try {
-        const svg = img.nextElementSibling;
-        if (svg && svg.createSVGPoint) {
-          const pt = svg.createSVGPoint();
-          pt.x = e.clientX;
-          pt.y = e.clientY;
-          const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
-          x = svgP.x / (img.naturalWidth || 800);
-          y = svgP.y / (img.naturalHeight || 600);
-        } else {
-          throw new Error('SVG method failed');
-        }
-      } catch (error) {
+      // Desktop: use SVG method
+      const svg = img.nextElementSibling;
+      if (svg && svg.createSVGPoint && svg.getScreenCTM) {
+        const pt = svg.createSVGPoint();
+        pt.x = clientX;
+        pt.y = clientY;
+        const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+        x = svgP.x / (img.naturalWidth || 800);
+        y = svgP.y / (img.naturalHeight || 600);
+      } else {
         const imgRect = img.getBoundingClientRect();
-        const containerRect = img.parentElement.parentElement.getBoundingClientRect();
-        
-        const centerX = containerRect.left + containerRect.width / 2;
-        const centerY = containerRect.top + containerRect.height / 2;
-        let clickX = e.clientX - centerX;
-        let clickY = e.clientY - centerY;
-        
-        clickX /= zoom;
-        clickY /= zoom;
-        
-        const radians = (-rotation * Math.PI) / 180;
-        const rotatedX = clickX * Math.cos(radians) - clickY * Math.sin(radians);
-        const rotatedY = clickX * Math.sin(radians) + clickY * Math.cos(radians);
-        
-        x = (rotatedX - pan.x + imgRect.width / 2) / imgRect.width;
-        y = (rotatedY - pan.y + imgRect.height / 2) / imgRect.height;
+        x = (clientX - imgRect.left) / imgRect.width;
+        y = (clientY - imgRect.top) / imgRect.height;
       }
     }
     
@@ -116,9 +109,10 @@ export default function App(){
       return;
     }
     
-    // Ensure coordinates are within bounds
-    x = Math.max(0, Math.min(1, x));
-    y = Math.max(0, Math.min(1, y));
+    // Check if click is within image bounds - prevent out of bounds labels
+    if (x < 0 || x > 1 || y < 0 || y > 1) {
+      return; // Don't create label if outside image bounds
+    }
     
     const newUnit = prompt('Enter unit number (e.g. 1525)');
     if (!newUnit) return;
