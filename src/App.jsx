@@ -1,7 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react'
 import axios from 'axios'
+import { solveTSP } from './tsp.js'
 
 const SERVER = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+const IS_DEMO = import.meta.env.VITE_DEPLOY_MODE === 'demo'
 
 export default function App(){
   const [map, setMap] = useState(null) // {mapId,imageUrl,width,height,units}
@@ -37,6 +39,10 @@ export default function App(){
 
   // upload map image
   async function uploadMap(e){
+    if (IS_DEMO) {
+      alert('Upload disabled in demo mode. Use the existing map.');
+      return;
+    }
     const file = e.target.files[0];
     if (!file) return;
     const form = new FormData();
@@ -125,9 +131,14 @@ export default function App(){
   }
 
   async function saveUnitsToServer(updated){
-    if (!map) { setUnits(updated); return; }
-    await axios.post(`${SERVER}/maps/${map.mapId}/units`, { units: updated });
-    setUnits(updated);
+    if (!map || IS_DEMO) { setUnits(updated); return; }
+    try {
+      await axios.post(`${SERVER}/maps/${map.mapId}/units`, { units: updated });
+      setUnits(updated);
+    } catch (error) {
+      // In case of server error, still update local state
+      setUnits(updated);
+    }
   }
 
   function sortUnitsAsc(){
@@ -164,28 +175,60 @@ export default function App(){
     if (!map) return alert('Upload and mark a map first');
     const list = Array.from(selectedUnits);
     if (!list.length) return alert('Select some units first');
-    const body = { units: list, startUnit: list[0], returnToStart: false };
-    try{
-      const res = await axios.post(`${SERVER}/maps/${map.mapId}/route`, body);
-      setRoute(res.data);
-    }catch(err){
-      alert(err.response?.data?.error || 'Route error');
+    
+    if (IS_DEMO) {
+      // Client-side route computation for demo mode
+      const unitMap = {};
+      for (const u of units) unitMap[u.unit] = u;
+      const missing = list.filter(u => !unitMap[u]);
+      if (missing.length) return alert(`Units not found: ${missing.join(', ')}`);
+      
+      const points = list.map(unitId => {
+        const unit = unitMap[unitId];
+        return { id: unit.unit, x: unit.x, y: unit.y, floor: unit.floor || 0 };
+      });
+      
+      const { orderedIdx, length } = solveTSP(points, { floorPenalty: 0.02, returnToStart: false });
+      const ordered = orderedIdx.map(i => points[i].id);
+      const routePath = orderedIdx.map(i => ({ id: points[i].id, x: points[i].x, y: points[i].y }));
+      
+      setRoute({ route: ordered, length, path: routePath });
+    } else {
+      const body = { units: list, startUnit: list[0], returnToStart: false };
+      try{
+        const res = await axios.post(`${SERVER}/maps/${map.mapId}/route`, body);
+        setRoute(res.data);
+      }catch(err){
+        alert(err.response?.data?.error || 'Route error');
+      }
     }
   }
 
   function loadMapJson(){
     if (!map) return;
-    axios.get(`${SERVER}/maps/${map.mapId}`).then(r=>{
-      setMap(r.data); setUnits(r.data.units || []);
+    const url = IS_DEMO ? `/demo/data/${map.mapId}.json` : `${SERVER}/maps/${map.mapId}`;
+    axios.get(url).then(r=>{
+      const mapData = r.data;
+      // Fix image URL for demo mode
+      if (IS_DEMO && mapData.imageUrl) {
+        mapData.imageUrl = mapData.imageUrl.replace('/maps/', '/demo/data/');
+      }
+      setMap(mapData); setUnits(mapData.units || []);
     })
   }
 
   // Load map by ID (for URL-based loading)
   async function loadMapById(mapId){
     try {
-      const res = await axios.get(`${SERVER}/maps/${mapId}`);
-      setMap(res.data);
-      setUnits(res.data.units || []);
+      const url = IS_DEMO ? `/demo/data/${mapId}.json` : `${SERVER}/maps/${mapId}`;
+      const res = await axios.get(url);
+      const mapData = res.data;
+      // Fix image URL for demo mode to use client-side static files
+      if (IS_DEMO && mapData.imageUrl) {
+        mapData.imageUrl = mapData.imageUrl.replace('/maps/', '/demo/data/');
+      }
+      setMap(mapData);
+      setUnits(mapData.units || []);
       // Update URL without page reload
       window.history.pushState({}, '', `/maps/${mapId}`);
     } catch (error) {
@@ -220,16 +263,38 @@ export default function App(){
     if (!map) return alert('Upload and mark a map first');
     const list = inputList.split(',').map(s=>s.trim()).filter(Boolean);
     if (!list.length) return alert('Add some unit numbers in the list');
-    const body = { units: list, startUnit: list[0], returnToStart: false };
-    try{
-      const res = await axios.post(`${SERVER}/maps/${map.mapId}/route`, body);
-      setRoute(res.data);
-      // Auto-navigate to Directory Map view on mobile after computing route
-      if (window.innerWidth <= 768) {
-        setActiveTab('map');
+    
+    if (IS_DEMO) {
+      // Client-side route computation for demo mode
+      const unitMap = {};
+      for (const u of units) unitMap[u.unit] = u;
+      const missing = list.filter(u => !unitMap[u]);
+      if (missing.length) return alert(`Units not found: ${missing.join(', ')}`);
+      
+      const points = list.map(unitId => {
+        const unit = unitMap[unitId];
+        return { id: unit.unit, x: unit.x, y: unit.y, floor: unit.floor || 0 };
+      });
+      
+      const { orderedIdx, length } = solveTSP(points, { floorPenalty: 0.02, returnToStart: false });
+      const ordered = orderedIdx.map(i => points[i].id);
+      const routePath = orderedIdx.map(i => ({ id: points[i].id, x: points[i].x, y: points[i].y }));
+      
+      setRoute({ route: ordered, length, path: routePath });
+    } else {
+      // Server-side route computation
+      const body = { units: list, startUnit: list[0], returnToStart: false };
+      try{
+        const res = await axios.post(`${SERVER}/maps/${map.mapId}/route`, body);
+        setRoute(res.data);
+      }catch(err){
+        alert(err.response?.data?.error || 'Route error');
       }
-    }catch(err){
-      alert(err.response?.data?.error || 'Route error');
+    }
+    
+    // Auto-navigate to Directory Map view on mobile after computing route
+    if (window.innerWidth <= 768) {
+      setActiveTab('map');
     }
   }
 
@@ -500,9 +565,9 @@ export default function App(){
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
           >
-            {/* Bottom control bar */}
-            <div className="position-absolute bottom-0 start-0 w-100 p-3" style={{zIndex: 1000}}>
-              <div className="d-flex justify-content-between align-items-center">
+            {/* Floating Control Panel */}
+            <div className="position-absolute top-0 end-0 m-3" style={{zIndex: 1000}}>
+              <div className="d-flex gap-2">
                 <button className="btn btn-primary" onClick={rotateLeft}>↺</button>
                 <button className="btn btn-success" onClick={selectedUnits.size > 0 ? computeRouteForSelected : computeRoute}>🎯 Route{selectedUnits.size > 0 ? ` (${selectedUnits.size})` : ''}</button>
                 <button className="btn btn-primary" onClick={rotateRight}>↻</button>
@@ -511,10 +576,12 @@ export default function App(){
               <div style={{position: 'relative', display: 'inline-block', transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom})`, transformOrigin: 'center'}}>
                 <img 
                   ref={imgRef} 
-                  src={`${SERVER}${map.imageUrl}`} 
+                  src={IS_DEMO ? map.imageUrl : `${SERVER}${map.imageUrl}`} 
                   className="map-img" 
                   alt="map" 
                   onClick={onMapClick}
+                  onError={(e) => console.error('Image failed to load:', e.target.src)}
+                  onLoad={() => console.log('Image loaded:', IS_DEMO ? map.imageUrl : `${SERVER}${map.imageUrl}`)}
                 />
                 {/* overlay SVG */}
                 <svg
