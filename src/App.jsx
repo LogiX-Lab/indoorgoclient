@@ -318,6 +318,7 @@ export default function App(){
   // Zoom and pan functions
   function handleWheel(e){
     e.preventDefault();
+    e.stopPropagation();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setZoom(prev => Math.max(0.5, Math.min(3, prev * delta)));
   }
@@ -549,7 +550,7 @@ export default function App(){
           <div 
             ref={containerRef}
             className="w-100 h-100 position-relative d-flex justify-content-center align-items-center"
-            style={{cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden'}}
+            style={{cursor: isDragging ? 'grabbing' : 'grab', overflow: zoom > 1 ? 'auto' : 'hidden', touchAction: 'none'}}
             onWheel={handleWheel}
             onTouchStart={(e) => {
               handleTouchStart(e);
