@@ -59,11 +59,70 @@ export default function App(){
   function onMapClick(e){
     if (!map) return;
     const img = imgRef.current;
-    const rect = img.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+    if (!img || !img.naturalWidth || !img.naturalHeight) return;
+    
+    let x, y;
+    const isMobile = window.innerWidth <= 768;
+    
+    if (isMobile) {
+      // Mobile-specific coordinate calculation
+      const imgRect = img.getBoundingClientRect();
+      
+      // Use touch coordinates if available, otherwise mouse coordinates
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      // Simple coordinate calculation for mobile
+      x = (clientX - imgRect.left) / imgRect.width;
+      y = (clientY - imgRect.top) / imgRect.height;
+    } else {
+      // Desktop coordinate calculation with transforms
+      try {
+        const svg = img.nextElementSibling;
+        if (svg && svg.createSVGPoint) {
+          const pt = svg.createSVGPoint();
+          pt.x = e.clientX;
+          pt.y = e.clientY;
+          const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+          x = svgP.x / (img.naturalWidth || 800);
+          y = svgP.y / (img.naturalHeight || 600);
+        } else {
+          throw new Error('SVG method failed');
+        }
+      } catch (error) {
+        const imgRect = img.getBoundingClientRect();
+        const containerRect = img.parentElement.parentElement.getBoundingClientRect();
+        
+        const centerX = containerRect.left + containerRect.width / 2;
+        const centerY = containerRect.top + containerRect.height / 2;
+        let clickX = e.clientX - centerX;
+        let clickY = e.clientY - centerY;
+        
+        clickX /= zoom;
+        clickY /= zoom;
+        
+        const radians = (-rotation * Math.PI) / 180;
+        const rotatedX = clickX * Math.cos(radians) - clickY * Math.sin(radians);
+        const rotatedY = clickX * Math.sin(radians) + clickY * Math.cos(radians);
+        
+        x = (rotatedX - pan.x + imgRect.width / 2) / imgRect.width;
+        y = (rotatedY - pan.y + imgRect.height / 2) / imgRect.height;
+      }
+    }
+    
+    // Validate coordinates
+    if (x === null || y === null || isNaN(x) || isNaN(y)) {
+      alert('Error: Invalid coordinates. Please try clicking again.');
+      return;
+    }
+    
+    // Ensure coordinates are within bounds
+    x = Math.max(0, Math.min(1, x));
+    y = Math.max(0, Math.min(1, y));
+    
     const newUnit = prompt('Enter unit number (e.g. 1525)');
     if (!newUnit) return;
+    
     const u = { unit: newUnit.trim(), x: Number(x.toFixed(4)), y: Number(y.toFixed(4)), floor: 0 };
     const updated = [...units, u];
     setUnits(updated);
@@ -630,6 +689,7 @@ export default function App(){
                     />
                     {/* overlay SVG */}
                     <svg
+                      key={`svg-${units.length}`}
                       className="svg-overlay"
                       viewBox={`0 0 ${imgRef.current?.naturalWidth || 800} ${imgRef.current?.naturalHeight || 600}`}
                       preserveAspectRatio="xMidYMid meet"
